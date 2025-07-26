@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<title>Order Book en Temps Réel</title>
+<style>
+  body { font-family: monospace; }
+  table { border-collapse: collapse; width: 50%; margin-bottom: 20px;}
+  th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: right; }
+  th { background: #eee; }
+  .bids { color: green; }
+  .asks { color: red; }
+</style>
+</head>
+<body>
+
+<h2>Order Book</h2>
+<table id="bids-table">
+  <thead><tr><th>Prix (Buy)</th><th>Quantité</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<table id="asks-table">
+  <thead><tr><th>Prix (Sell)</th><th>Quantité</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<script>
+  const ws = new WebSocket('ws://localhost:8766');
+
+  ws.onopen = () => {
+    console.log("WebSocket connecté");
+    // On s’abonne à l’order book
+    ws.send(JSON.stringify({type: 'suscribe_order_book'}));
+  };
+
+  ws.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'order_book_update') {
+      const data = msg.data;
+      updateOrderBook(data.bids, data.asks);
+    }
+  };
+
+  function updateOrderBook(bids, asks) {
+    const bidsTableBody = document.querySelector('#bids-table tbody');
+    const asksTableBody = document.querySelector('#asks-table tbody');
+
+    // On vide les tableaux
+    bidsTableBody.innerHTML = '';
+    asksTableBody.innerHTML = '';
+
+    // bids est un objet {price: [orders]}
+    // On trie les prix décroissants pour les bids
+    const bidPrices = Object.keys(bids).map(parseFloat).sort((a,b) => b - a);
+    for (const price of bidPrices) {
+      const quantity = bids[price].reduce((sum, order) => sum + order.quantity, 0);
+      const tr = document.createElement('tr');
+      tr.classList.add('bids');
+      tr.innerHTML = `<td>${price.toFixed(2)}</td><td>${quantity}</td>`;
+      bidsTableBody.appendChild(tr);
+    }
+
+    // asks triés par prix croissant
+    const askPrices = Object.keys(asks).map(parseFloat).sort((a,b) => a - b);
+    for (const price of askPrices) {
+      const quantity = asks[price].reduce((sum, order) => sum + order.quantity, 0);
+      const tr = document.createElement('tr');
+      tr.classList.add('asks');
+      tr.innerHTML = `<td>${price.toFixed(2)}</td><td>${quantity}</td>`;
+      asksTableBody.appendChild(tr);
+    }
+  }
+</script>
+
+</body>
+</html>
