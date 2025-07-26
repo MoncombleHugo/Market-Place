@@ -26,6 +26,7 @@ class OrderBook:
         self.trades=deque(maxlen=buffer_size)
         self.time_history = deque(maxlen=buffer_size)
         self.volume_history = deque(maxlen=buffer_size)
+        self.price_history = deque(maxlen=buffer_size)
         self.lock=asyncio.Lock()
         self.event_queue = asyncio.Queue()
         self.pending_trades=[]
@@ -100,9 +101,9 @@ class OrderBook:
                 opposite_orders.pop(0)
                 if not opposite_orders:
                     del opposite_book[best_price]
-                del self.order_map[opposite_order.order_id]
+                del self.order_buffer[opposite_order.id]
             if order.quantity == 0:
-                del self.order_map[order.order_id]
+                del self.order_buffer[order.id]
             print(f"Matched order {order.side} trade, price={best_price}, qty={trade_quantity}")
 
         return trades
@@ -173,10 +174,11 @@ class OrderBook:
             return None, []
         return self.bids.peekitem(-1)
     
-    def get_best_bid(self):
-        if not self.bids:
+    def get_best_ask(self):
+        if not self.asks:
             return None, []
-        return self.bids.peekitem(-1)
+        return self.asks.peekitem(0)
 
     def get_last_price(self):
         return self.last_trade_price
+    
