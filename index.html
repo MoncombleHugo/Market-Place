@@ -7,38 +7,90 @@
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
     <style>
       body {
-        font-family: Arial, sans-serif;
         margin: 0;
         padding: 20px;
-        height: 100vh;
+        font-family: Arial, sans-serif;
+      }
+      
+      h1 {
+        margin-top: 0;
+      }
+      
+      .main-layout {
         display: flex;
         flex-direction: column;
+        height: calc(100vh - 120px);
+        margin-top: 20px;
       }
-      #plot {
+
+      .chart-container {
         width: 100%;
-        height: 80vh;
-        flex-grow: 1;
+        height: 60%;
       }
-      #orderbook-plot {
+
+      .bottom-panel {
+        display: flex;
+        height: 40%;
         width: 100%;
-        height: 600px;
-        display: none;
+        border-top: 1px solid #ddd;
       }
-      button {
-        margin: 10px 0;
+
+      .orderbook-container {
+        width: 50%;
         padding: 10px;
+        border-right: 1px solid #ddd;
+        overflow: auto;
       }
-      .date-range {
-        margin: 10px 0;
+
+      .trades-container {
+        width: 50%;
+        padding: 10px;
+        overflow: auto;
       }
-      .date-range label {
-        margin-right: 10px;
+
+      #trades-list {
+        max-height: 100%;
+        overflow-y: auto;
       }
-      .date-range input {
-        margin-right: 10px;
+
+      .trade-item {
+        padding: 5px;
+        margin: 2px 0;
+        border-radius: 3px;
+        font-size: 12px;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 5px;
       }
+
+      .trade-buy {
+        background-color: rgba(0, 255, 0, 0.1);
+      }
+
+      .trade-sell {
+        background-color: rgba(255, 0, 0, 0.1);
+      }
+
+      .trade-price {
+        font-weight: bold;
+      }
+      
       .controls {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
         margin-bottom: 20px;
+      }
+      
+      .date-range {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+      
+      button {
+        padding: 5px 10px;
+        cursor: pointer;
       }
     </style>
   </head>
@@ -63,9 +115,23 @@
         </select>
       </div>
     </div>
-    <div id="plot"></div>
-    <button id="toggle-orderbook">Show Order Book</button>
-    <div id="orderbook-plot"></div>
+    
+    <div class="main-layout">
+      <div class="chart-container">
+        <div id="plot"></div>
+      </div>
+      <div class="bottom-panel">
+        <div class="orderbook-container">
+          <button id="toggle-orderbook">Show Order Book</button>
+          <div id="orderbook-plot" style="display: none;"></div>
+        </div>
+        <div class="trades-container">
+          <h3>Recent Trades (Last 10)</h3>
+          <div id="trades-list"></div>
+        </div>
+      </div>
+    </div>
+    
     <script src="script.js"></script>
   </body>
 </html>

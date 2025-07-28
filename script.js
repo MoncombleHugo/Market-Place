@@ -38,6 +38,46 @@ let orderBookPlotInitialized = false;
 const toggleButton = document.getElementById("toggle-orderbook");
 let showOrderBook = false;
 
+// For trade list
+const tradesList = document.getElementById('trades-list');
+const maxTradesToShow = 10;
+let recentTrades = [];
+
+// Format trade for display
+function formatTrade(trade) {
+  const date = new Date(trade.timestamp * 1000);
+  const timeString = date.toLocaleTimeString();
+  const price = trade.price.toFixed(2);
+  const quantity = trade.quantity;
+  const side = trade.side || (trade.price >= (recentTrades[0]?.price || trade.price) ? 'buy' : 'sell');
+  
+  return `
+    <div class="trade-item trade-${side}">
+      <div class="trade-time">${timeString}</div>
+      <div>Price: <span class="trade-price">${price}</span></div>
+      <div>Qty: ${quantity}</div>
+      <div>${side.toUpperCase()}</div>
+    </div>
+  `;
+}
+
+// Update trade list display
+function updateTradeList(newTrade) {
+  recentTrades.unshift({
+    ...newTrade,
+    timestamp: newTrade.timestamp || Date.now() / 1000
+  });
+  
+  if (recentTrades.length > maxTradesToShow) {
+    recentTrades = recentTrades.slice(0, maxTradesToShow);
+  }
+  
+  // Clear the list and rebuild it to ensure we have exactly 10 items
+  tradesList.innerHTML = '';
+  recentTrades.forEach(trade => {
+    tradesList.insertAdjacentHTML('beforeend', formatTrade(trade));
+  });
+}
 
 toggleButton.addEventListener("click", () => {
   showOrderBook = !showOrderBook;
@@ -92,32 +132,27 @@ function requestOHLCV(fromTime, toTime, candleInterval) {
   );
 }
 
-// Add these at the top with your other variables
+// Chart variables
 let plotInitialized = false;
 let currentTraces = null;
 
-// Replace your updateOHLCVPlot function with this version
 function updateOHLCVPlot(data, fromTime, toTime) {
   if (!Array.isArray(data)) {
     console.error("Invalid historical OHLC data received:", data);
     return;
   }
 
-  // Store the current time range
   currentTimeRange = {
     from: fromTime * 1000,
     to: toTime * 1000
   };
 
-  // Process data into candles
   const processedData = processDataToCandles(data, fromTime, toTime);
 
   if (!plotInitialized) {
-    // First time - create the plot
     createNewPlot(processedData, fromTime, toTime);
     plotInitialized = true;
   } else {
-    // Subsequent updates - extend traces
     updateExistingPlot(processedData);
   }
 }
@@ -160,7 +195,6 @@ function processDataToCandles(data, fromTime, toTime) {
   return { times, opens, highs, lows, closes };
 }
 
-// Replace the createNewPlot function with this version:
 function createNewPlot(data, fromTime, toTime) {
   const trace = {
     type: 'candlestick',
@@ -176,75 +210,66 @@ function createNewPlot(data, fromTime, toTime) {
 
   currentTraces = [trace];
 
-  // Calculate the actual min and max from the data
   const { minPrice, maxPrice } = getPriceRange(data.highs, data.lows);
-  const padding = (maxPrice - minPrice) * 0.1; // 10% padding
+  const padding = (maxPrice - minPrice) * 0.1;
 
   const layout = {
-  title: 'Price Chart',
-  xaxis: { 
-    title: 'Time',
-    range: [new Date(fromTime * 1000), new Date(toTime * 1000)],
-    type: 'date',
-    rangeslider: {
-      visible: true,
-      range: [new Date(fromTime * 1000), new Date(toTime * 1000)]
-    }
-  },
-  yaxis: { 
-    title: 'Price',
-    range: [minPrice - padding, maxPrice + padding],
-    autorange: false,
-    fixedrange: false
-  },
-  margin: { t: 40, b: 40, l: 80, r: 40 },
-  plot_bgcolor: '#f8f8f8',
-  paper_bgcolor: '#f8f8f8',
-  height: null // Let it take the full container height
-};
+    title: 'Price Chart',
+    xaxis: { 
+      title: 'Time',
+      range: [new Date(fromTime * 1000), new Date(toTime * 1000)],
+      type: 'date',
+      rangeslider: {
+        visible: true,
+        range: [new Date(fromTime * 1000), new Date(toTime * 1000)]
+      }
+    },
+    yaxis: { 
+      title: 'Price',
+      range: [minPrice - padding, maxPrice + padding],
+      autorange: false,
+      fixedrange: false
+    },
+    margin: { t: 40, b: 40, l: 80, r: 40 },
+    plot_bgcolor: '#f8f8f8',
+    paper_bgcolor: '#f8f8f8',
+    height: null
+  };
 
   Plotly.newPlot('plot', currentTraces, layout).then(() => {
     setupZoomHandler();
   });
 }
 
-// Add this helper function to calculate price range:
 function getPriceRange(highs, lows) {
   let minPrice = Infinity;
   let maxPrice = -Infinity;
   
-  // Filter out null values and find actual min/max
   const validHighs = highs.filter(h => h !== null);
   const validLows = lows.filter(l => l !== null);
   
   if (validLows.length > 0) minPrice = Math.min(...validLows);
   if (validHighs.length > 0) maxPrice = Math.max(...validHighs);
   
-  // Fallback values if no valid data
   if (minPrice === Infinity) minPrice = 0;
   if (maxPrice === -Infinity) maxPrice = minPrice + 1;
   
   return { minPrice, maxPrice };
 }
 
-// Update the updateExistingPlot function:
 function updateExistingPlot(newData) {
-  // Get current zoom state before updating
   const plotDiv = document.getElementById('plot');
   const currentZoom = plotDiv.layout || {};
   
-  // Update the trace data
   currentTraces[0].x = newData.times;
   currentTraces[0].open = newData.opens;
   currentTraces[0].high = newData.highs;
   currentTraces[0].low = newData.lows;
   currentTraces[0].close = newData.closes;
 
-  // Calculate new y-axis range based on actual data
   const { minPrice, maxPrice } = getPriceRange(newData.highs, newData.lows);
   const padding = (maxPrice - minPrice) * 0.1;
 
-  // Prepare layout update
   const layoutUpdate = {
     xaxis: {
       rangeslider: {
@@ -253,7 +278,6 @@ function updateExistingPlot(newData) {
     }
   };
 
-  // Only update y-axis if user hasn't manually zoomed
   if (!isUserZoomed || !currentZoom.yaxis || !currentZoom.yaxis.range) {
     layoutUpdate.yaxis = {
       range: [minPrice - padding, maxPrice + padding],
@@ -269,23 +293,21 @@ function updateExistingPlot(newData) {
   Plotly.react('plot', currentTraces, layoutUpdate);
 }
 
-// Update the handleNewTrade function:
 function handleNewTrade(trade) {
+  updateTradeList(trade);
+
   const candleInterval = parseInt(candleIntervalSelect.value) * 1000;
   const currentBucket = Math.floor(trade.timestamp / candleInterval) * candleInterval;
   const bucketTime = new Date(currentBucket);
   
-  // Get current zoom state
   const plotDiv = document.getElementById('plot');
   const currentZoom = plotDiv.layout || {};
   
-  // Find existing candle index
   const existingIndex = currentTraces[0].x.findIndex(t => 
     t.getTime() === bucketTime.getTime()
   );
 
   if (existingIndex >= 0) {
-    // Update existing candle
     const update = {
       'high[0]': currentTraces[0].high.map((val, i) => 
         i === existingIndex ? Math.max(val || -Infinity, trade.price) : val
@@ -298,12 +320,10 @@ function handleNewTrade(trade) {
       )
     };
     
-    // Update the trace data
     currentTraces[0].high[existingIndex] = update['high[0]'][existingIndex];
     currentTraces[0].low[existingIndex] = update['low[0]'][existingIndex];
     currentTraces[0].close[existingIndex] = update['close[0]'][existingIndex];
     
-    // Only adjust y-axis if user hasn't manually zoomed
     if (!isUserZoomed || !currentZoom.yaxis || !currentZoom.yaxis.range) {
       const { minPrice, maxPrice } = getPriceRange(currentTraces[0].high, currentTraces[0].low);
       const padding = (maxPrice - minPrice) * 0.1;
@@ -315,32 +335,26 @@ function handleNewTrade(trade) {
     
     Plotly.restyle('plot', update, [0]);
   } else {
-    // Add new candle (only if within current range)
     const bucketTimestamp = bucketTime.getTime();
     if (bucketTimestamp >= currentTimeRange.from && bucketTimestamp <= currentTimeRange.to) {
-      // Create new arrays with the added candle
       const newX = [...currentTraces[0].x, bucketTime];
       const newOpen = [...currentTraces[0].open, trade.price];
       const newHigh = [...currentTraces[0].high, trade.price];
       const newLow = [...currentTraces[0].low, trade.price];
       const newClose = [...currentTraces[0].close, trade.price];
       
-      // Sort by time
       const sortedIndices = newX
         .map((_, i) => i)
         .sort((a, b) => newX[a] - newX[b]);
       
-      // Update trace data
       currentTraces[0].x = sortedIndices.map(i => newX[i]);
       currentTraces[0].open = sortedIndices.map(i => newOpen[i]);
       currentTraces[0].high = sortedIndices.map(i => newHigh[i]);
       currentTraces[0].low = sortedIndices.map(i => newLow[i]);
       currentTraces[0].close = sortedIndices.map(i => newClose[i]);
       
-      // Prepare layout update
       const layoutUpdate = {};
       
-      // Only adjust y-axis if user hasn't manually zoomed
       if (!isUserZoomed || !currentZoom.yaxis || !currentZoom.yaxis.range) {
         const { minPrice, maxPrice } = getPriceRange(currentTraces[0].high, currentTraces[0].low);
         const padding = (maxPrice - minPrice) * 0.1;
@@ -362,7 +376,6 @@ function handleNewTrade(trade) {
   }
 }
 
-// Order book update function remains the same
 function updateOrderBook(messageData) {
   const state = messageData.data;
 
@@ -371,14 +384,12 @@ function updateOrderBook(messageData) {
     return;
   }
 
-  // Aggregate bids
   const bidLevels = Object.entries(state.bids).map(([priceStr, orders]) => {
     const price = parseFloat(priceStr);
     const totalQty = orders.reduce((sum, order) => sum + parseFloat(order.quantity), 0);
     return { price, quantity: totalQty };
   }).sort((a, b) => b.price - a.price).slice(0, 10);
 
-  // Aggregate asks
   const askLevels = Object.entries(state.asks).map(([priceStr, orders]) => {
     const price = parseFloat(priceStr);
     const totalQty = orders.reduce((sum, order) => sum + parseFloat(order.quantity), 0);
@@ -445,11 +456,9 @@ ws.onopen = function() {
   const fromTime = convertDateToTimestamp(startValue);
   const toTime = endValue ? convertDateToTimestamp(endValue) : Math.floor(Date.now() / 1000);
   
-  // Initial data load
   requestOHLCV(fromTime, toTime, candleIntervalValue);
   ws.send(JSON.stringify({ type: "suscribe_trades" }));
   
-  // Start auto-update
   startAutoUpdate(fromTime, toTime, candleIntervalValue);
 };
 
@@ -494,7 +503,6 @@ applyButton.addEventListener("click", () => {
   const endValue = endDateInput.value;
   const candleIntervalValue = parseInt(candleIntervalSelect.value);
 
-  // Save to localStorage
   localStorage.setItem("startDate", startValue || "");
   localStorage.setItem("endDate", endValue || "");
   localStorage.setItem("candleInterval", candleIntervalValue || "");
@@ -502,19 +510,16 @@ applyButton.addEventListener("click", () => {
   const fromTime = convertDateToTimestamp(startValue);
   const toTime = endValue ? convertDateToTimestamp(endValue) : Math.floor(Date.now() / 1000);
 
-  // Restart auto-update with new range
   stopAutoUpdate();
   requestOHLCV(fromTime, toTime, candleIntervalValue);
   startAutoUpdate(fromTime, toTime, candleIntervalValue);
 });
 
 function startAutoUpdate(fromTime, toTime, candleInterval) {
-  // Clear any existing interval
   if (autoUpdateInterval) {
     clearInterval(autoUpdateInterval);
   }
   
-  // Set up new interval
   autoUpdateInterval = setInterval(() => {
     requestOHLCV(fromTime, toTime, candleInterval);
   }, AUTO_UPDATE_INTERVAL);
@@ -527,16 +532,13 @@ function stopAutoUpdate() {
   }
 }
 
-// Update your setupZoomHandler function
 function setupZoomHandler() {
   const plot = document.getElementById('plot');
   plot.on('plotly_relayout', function(eventdata) {
-    // Check if user zoomed or panned
     if (eventdata['xaxis.range[0]'] || eventdata['xaxis.range'] || 
         eventdata['xaxis.autorange'] === false) {
       isUserZoomed = true;
       
-      // Store the current zoom range
       const currentLayout = plot.layout;
       if (currentLayout && currentLayout.xaxis) {
         currentTimeRange.userZoom = {
@@ -545,7 +547,6 @@ function setupZoomHandler() {
         };
       }
     } else if (eventdata['xaxis.autorange'] === true) {
-      // User clicked "reset axes" or similar
       isUserZoomed = false;
       delete currentTimeRange.userZoom;
     }
