@@ -40,13 +40,6 @@ def ask_trader_counts():
         initialvalue=2
     )
 
-    trader_counts['BalancedTrader'] = simpledialog.askinteger(
-        "Configuration",
-        "Combien de BalancedTraders voulez-vous ?",
-        minvalue=0,
-        initialvalue=2
-    )
-
     # Add a dialog to ask if order book should be reset
     reset_orderbook = simpledialog.askstring(
         "Configuration",

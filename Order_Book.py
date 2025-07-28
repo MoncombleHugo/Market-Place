@@ -5,6 +5,7 @@ from collections import deque
 import sqlite3
 from typing import List, Dict
 import asyncio
+import uuid
 
 @dataclass
 class Order:
@@ -44,11 +45,11 @@ class OrderBook:
         self.db_conn.commit()
         self.db_conn.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON trades(timestamp)')
         self.db_conn.commit()
-
+        
     def reset_orderbook(self):
-        """Reset the order book to empty state"""
-        self.bids = sortedcontainers.SortedDict()  # Maintain SortedDict type
-        self.asks = sortedcontainers.SortedDict()  # Maintain SortedDict type
+        """Reset with some initial liquidity"""
+        self.bids = sortedcontainers.SortedDict()
+        self.asks = sortedcontainers.SortedDict()
         self.order_buffer = {}
         self.last_trade_price = None
         self.trades = deque(maxlen=self.buffer_size)
@@ -56,6 +57,60 @@ class OrderBook:
         self.volume_history = deque(maxlen=self.buffer_size)
         self.price_history = deque(maxlen=self.buffer_size)
         self.pending_trades = []
+
+        # Add initial liquidity
+        initial_bid = Order(
+            id=str(uuid.uuid4()),
+            trader_id="init_bot",
+            price=99.5,
+            quantity=100,
+            side="buy",
+            timestamp=time.time()
+        )
+        
+        initial_ask = Order(
+            id=str(uuid.uuid4()),
+            trader_id="init_bot",
+            price=100.5,
+            quantity=100,
+            side="sell",
+            timestamp=time.time()
+        )
+        
+        self.add_to_book(initial_bid)
+        self.add_to_book(initial_ask)
+        print("Order book reset with initial liquidity")
+
+    async def trades_record(self, trades: List[Dict]) -> None:
+        trader_portfolios = {}  # Track trader portfolios
+        
+        for trade in trades:
+            self.trades.append(trade)
+            self.time_history.append(trade['timestamp'])
+            self.volume_history.append(trade['quantity'])
+            self.price_history.append(trade['price'])
+            self.pending_trades.append(trade)
+            
+            # Update trader portfolios in our tracking
+            if trade.get('buyer_id'):
+                trader_portfolios.setdefault(trade['buyer_id'], {'cash': 0, 'shares': 0})
+                trader_portfolios[trade['buyer_id']]['cash'] -= trade['price'] * trade['quantity'] * 1.001  # 0.1% fee
+                trader_portfolios[trade['buyer_id']]['shares'] += trade['quantity']
+                
+            if trade.get('seller_id'):
+                trader_portfolios.setdefault(trade['seller_id'], {'cash': 0, 'shares': 0})
+                trader_portfolios[trade['seller_id']]['cash'] += trade['price'] * trade['quantity'] * 0.999  # 0.1% fee
+                trader_portfolios[trade['seller_id']]['shares'] -= trade['quantity']
+        
+        if len(self.pending_trades) >= self.batch_size:
+            await self.flush_db()
+        
+        if trades:
+            await self.event_queue.put({
+                'type': 'new_trade', 
+                'trades': trades,
+                'trader_portfolios': trader_portfolios  # Include in event
+            })
 
     def validate_order(self, order: Order) -> bool:
         if order.quantity <= 0 or order.price <= 0:
@@ -142,14 +197,21 @@ class OrderBook:
     async def add_order(self, order: Order):
         async with self.lock:
             if not self.validate_order(order):
+                print(f"Invalid order rejected: {order}")
                 raise ValueError("Invalid order")
             
+            print(f"New {order.side} order: Price={order.price}, Qty={order.quantity}")
+            
             self.order_buffer[order.id] = order
-            trades= await self.match_order(order)
+            trades = await self.match_order(order)
+            
             if order.quantity > 0:
                 self.add_to_book(order)
+                print(f"Added to book: {len(self.bids)} bids, {len(self.asks)} asks")
+                
             if trades:
                 await self.trades_record(trades)
+                print(f"Executed {len(trades)} trades")
             
             return trades
         
