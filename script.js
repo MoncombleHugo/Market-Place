@@ -160,6 +160,7 @@ function processDataToCandles(data, fromTime, toTime) {
   return { times, opens, highs, lows, closes };
 }
 
+// Replace the createNewPlot function with this version:
 function createNewPlot(data, fromTime, toTime) {
   const trace = {
     type: 'candlestick',
@@ -175,30 +176,58 @@ function createNewPlot(data, fromTime, toTime) {
 
   currentTraces = [trace];
 
+  // Calculate the actual min and max from the data
+  const { minPrice, maxPrice } = getPriceRange(data.highs, data.lows);
+  const padding = (maxPrice - minPrice) * 0.1; // 10% padding
+
   const layout = {
-    title: 'Price Chart',
-    xaxis: { 
-      title: 'Time',
-      range: [new Date(fromTime * 1000), new Date(toTime * 1000)],
-      type: 'date',
-      rangeslider: {
-        visible: true,
-        range: [new Date(fromTime * 1000), new Date(toTime * 1000)]
-      }
-    },
-    yaxis: { title: 'Price' },
-    margin: { t: 40, b: 40, l: 60, r: 40 },
-    plot_bgcolor: '#f8f8f8',
-    paper_bgcolor: '#f8f8f8',
-    height: 500
-  };
+  title: 'Price Chart',
+  xaxis: { 
+    title: 'Time',
+    range: [new Date(fromTime * 1000), new Date(toTime * 1000)],
+    type: 'date',
+    rangeslider: {
+      visible: true,
+      range: [new Date(fromTime * 1000), new Date(toTime * 1000)]
+    }
+  },
+  yaxis: { 
+    title: 'Price',
+    range: [minPrice - padding, maxPrice + padding],
+    autorange: false,
+    fixedrange: false
+  },
+  margin: { t: 40, b: 40, l: 80, r: 40 },
+  plot_bgcolor: '#f8f8f8',
+  paper_bgcolor: '#f8f8f8',
+  height: null // Let it take the full container height
+};
 
   Plotly.newPlot('plot', currentTraces, layout).then(() => {
     setupZoomHandler();
   });
 }
 
-// Replace your updateExistingPlot function with this version
+// Add this helper function to calculate price range:
+function getPriceRange(highs, lows) {
+  let minPrice = Infinity;
+  let maxPrice = -Infinity;
+  
+  // Filter out null values and find actual min/max
+  const validHighs = highs.filter(h => h !== null);
+  const validLows = lows.filter(l => l !== null);
+  
+  if (validLows.length > 0) minPrice = Math.min(...validLows);
+  if (validHighs.length > 0) maxPrice = Math.max(...validHighs);
+  
+  // Fallback values if no valid data
+  if (minPrice === Infinity) minPrice = 0;
+  if (maxPrice === -Infinity) maxPrice = minPrice + 1;
+  
+  return { minPrice, maxPrice };
+}
+
+// Update the updateExistingPlot function:
 function updateExistingPlot(newData) {
   // Get current zoom state before updating
   const plotDiv = document.getElementById('plot');
@@ -211,7 +240,11 @@ function updateExistingPlot(newData) {
   currentTraces[0].low = newData.lows;
   currentTraces[0].close = newData.closes;
 
-  // Preserve the user's zoom state if they're zoomed in
+  // Calculate new y-axis range based on actual data
+  const { minPrice, maxPrice } = getPriceRange(newData.highs, newData.lows);
+  const padding = (maxPrice - minPrice) * 0.1;
+
+  // Prepare layout update
   const layoutUpdate = {
     xaxis: {
       rangeslider: {
@@ -220,16 +253,23 @@ function updateExistingPlot(newData) {
     }
   };
 
+  // Only update y-axis if user hasn't manually zoomed
+  if (!isUserZoomed || !currentZoom.yaxis || !currentZoom.yaxis.range) {
+    layoutUpdate.yaxis = {
+      range: [minPrice - padding, maxPrice + padding],
+      autorange: false
+    };
+  }
+
   if (isUserZoomed && currentZoom.xaxis) {
     layoutUpdate.xaxis.range = currentZoom.xaxis.range;
     layoutUpdate.xaxis.autorange = false;
   }
 
-  // Use react to update without resetting view
   Plotly.react('plot', currentTraces, layoutUpdate);
 }
 
-// Modify your handleNewTrade function to preserve zoom
+// Update the handleNewTrade function:
 function handleNewTrade(trade) {
   const candleInterval = parseInt(candleIntervalSelect.value) * 1000;
   const currentBucket = Math.floor(trade.timestamp / candleInterval) * candleInterval;
@@ -263,7 +303,16 @@ function handleNewTrade(trade) {
     currentTraces[0].low[existingIndex] = update['low[0]'][existingIndex];
     currentTraces[0].close[existingIndex] = update['close[0]'][existingIndex];
     
-    // Apply the update while preserving zoom
+    // Only adjust y-axis if user hasn't manually zoomed
+    if (!isUserZoomed || !currentZoom.yaxis || !currentZoom.yaxis.range) {
+      const { minPrice, maxPrice } = getPriceRange(currentTraces[0].high, currentTraces[0].low);
+      const padding = (maxPrice - minPrice) * 0.1;
+      
+      update.yaxis = {
+        range: [minPrice - padding, maxPrice + padding]
+      };
+    }
+    
     Plotly.restyle('plot', update, [0]);
   } else {
     // Add new candle (only if within current range)
@@ -288,8 +337,19 @@ function handleNewTrade(trade) {
       currentTraces[0].low = sortedIndices.map(i => newLow[i]);
       currentTraces[0].close = sortedIndices.map(i => newClose[i]);
       
-      // Prepare layout update that preserves zoom
+      // Prepare layout update
       const layoutUpdate = {};
+      
+      // Only adjust y-axis if user hasn't manually zoomed
+      if (!isUserZoomed || !currentZoom.yaxis || !currentZoom.yaxis.range) {
+        const { minPrice, maxPrice } = getPriceRange(currentTraces[0].high, currentTraces[0].low);
+        const padding = (maxPrice - minPrice) * 0.1;
+        
+        layoutUpdate.yaxis = {
+          range: [minPrice - padding, maxPrice + padding]
+        };
+      }
+      
       if (isUserZoomed && currentZoom.xaxis) {
         layoutUpdate.xaxis = {
           range: currentZoom.xaxis.range,
@@ -297,69 +357,7 @@ function handleNewTrade(trade) {
         };
       }
       
-      // Redraw the plot with new data
       Plotly.react('plot', currentTraces, layoutUpdate);
-    }
-  }
-}
-
-// Replace the handleNewTrade function with this corrected version
-function handleNewTrade(trade) {
-  const candleInterval = parseInt(candleIntervalSelect.value) * 1000;
-  const currentBucket = Math.floor(trade.timestamp / candleInterval) * candleInterval;
-  const bucketTime = new Date(currentBucket);
-  
-  // Find existing candle index
-  const existingIndex = currentTraces[0].x.findIndex(t => 
-    t.getTime() === bucketTime.getTime()
-  );
-
-  if (existingIndex >= 0) {
-    // Update existing candle - CORRECTED restyle syntax
-    const update = {
-      'high[0]': currentTraces[0].high.map((val, i) => 
-        i === existingIndex ? Math.max(val || -Infinity, trade.price) : val
-      ),
-      'low[0]': currentTraces[0].low.map((val, i) => 
-        i === existingIndex ? Math.min(val || Infinity, trade.price) : val
-      ),
-      'close[0]': currentTraces[0].close.map((val, i) => 
-        i === existingIndex ? trade.price : val
-      )
-    };
-    
-    // Update the trace data
-    currentTraces[0].high[existingIndex] = update['high[0]'][existingIndex];
-    currentTraces[0].low[existingIndex] = update['low[0]'][existingIndex];
-    currentTraces[0].close[existingIndex] = update['close[0]'][existingIndex];
-    
-    // Apply the update
-    Plotly.restyle('plot', update, [0]);
-  } else {
-    // Add new candle (only if within current range)
-    const bucketTimestamp = bucketTime.getTime();
-    if (bucketTimestamp >= currentTimeRange.from && bucketTimestamp <= currentTimeRange.to) {
-      // Create new arrays with the added candle
-      const newX = [...currentTraces[0].x, bucketTime];
-      const newOpen = [...currentTraces[0].open, trade.price];
-      const newHigh = [...currentTraces[0].high, trade.price];
-      const newLow = [...currentTraces[0].low, trade.price];
-      const newClose = [...currentTraces[0].close, trade.price];
-      
-      // Sort by time
-      const sortedIndices = newX
-        .map((_, i) => i)
-        .sort((a, b) => newX[a] - newX[b]);
-      
-      // Update trace data
-      currentTraces[0].x = sortedIndices.map(i => newX[i]);
-      currentTraces[0].open = sortedIndices.map(i => newOpen[i]);
-      currentTraces[0].high = sortedIndices.map(i => newHigh[i]);
-      currentTraces[0].low = sortedIndices.map(i => newLow[i]);
-      currentTraces[0].close = sortedIndices.map(i => newClose[i]);
-      
-      // Redraw the plot with new data
-      Plotly.react('plot', currentTraces, {});
     }
   }
 }

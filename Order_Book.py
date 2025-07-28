@@ -45,6 +45,18 @@ class OrderBook:
         self.db_conn.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON trades(timestamp)')
         self.db_conn.commit()
 
+    def reset_orderbook(self):
+        """Reset the order book to empty state"""
+        self.bids = sortedcontainers.SortedDict()  # Maintain SortedDict type
+        self.asks = sortedcontainers.SortedDict()  # Maintain SortedDict type
+        self.order_buffer = {}
+        self.last_trade_price = None
+        self.trades = deque(maxlen=self.buffer_size)
+        self.time_history = deque(maxlen=self.buffer_size)
+        self.volume_history = deque(maxlen=self.buffer_size)
+        self.price_history = deque(maxlen=self.buffer_size)
+        self.pending_trades = []
+
     def validate_order(self, order: Order) -> bool:
         if order.quantity <= 0 or order.price <= 0:
             return False
