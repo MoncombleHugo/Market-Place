@@ -101,16 +101,12 @@ Console-based interface for manual order entry.
 Real-time web interface for market visualization.
 
 **Features:**
-- **Price Charts**: Interactive candlestick charts using Plotly.js
+- **Price Charts**: Interactive candlestick charts
 - **Order Book Visualization**: Live display of current bids and asks
 - **Trade Feed**: Real-time list of recent trades
 - **Time Range Selection**: Configurable chart time windows
 - **Candle Intervals**: Multiple timeframes (10s, 30s, 1m, 30m, 1h)
 - **Auto-refresh**: Continuous updates of live data
-
-#### 3. Plotting Tools
-- **`plots.py`**: Simple matplotlib-based candlestick plotting
-- **`plots_gui.py`**: Tkinter GUI for interactive chart generation with time range selection
 
 ## Data Flow
 
@@ -274,18 +270,6 @@ The system is designed for easy extension:
 - `plotly.js`: Interactive web charts
 - WebSocket API for real-time communication
 - HTML5/CSS3 for user interface
-
-## Security and Production Considerations
-
-**Note**: This is a simulation system designed for educational and research purposes. For production use, consider:
-
-- Authentication and authorization for traders
-- Input validation and sanitization
-- Rate limiting and abuse prevention
-- Audit trails and compliance logging
-- High availability and fault tolerance
-- Regulatory compliance features
-
 ---
 
 This documentation provides a comprehensive overview of the Market-Place project. For specific implementation details, refer to the individual source files and their inline comments.
