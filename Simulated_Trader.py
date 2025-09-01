@@ -80,7 +80,6 @@ class Trader(ABC):
                 self.order_ws.send(json.dumps(order))
             except websocket.WebSocketConnectionClosedException:
                 break
-            # Remplacer time.sleep par stop_event.wait pour un arrêt immédiat
             delay = random.expovariate(getattr(self, 'arrival_rate', 1))
             if self.stop_event.wait(delay):
                 break
@@ -90,7 +89,6 @@ class Trader(ABC):
             self.md_ws.run_forever(ping_interval=30, ping_timeout=20)
             if self.stop_event.is_set():
                 break
-            # plus court délai pour reconnexion
             if self.stop_event.wait(0.1):
                 break
 
@@ -103,7 +101,6 @@ class Trader(ABC):
                 break
 
     def run(self):
-        # Threads en daemon : ils ne bloqueront pas la sortie process
         self.md_thread = threading.Thread(target=self.run_md_ws, daemon=True)
         self.order_thread = threading.Thread(target=self.run_order_ws, daemon=True)
         self.md_thread.start()
@@ -155,9 +152,7 @@ class SimulatedTrader(Trader):
 
     def generate_order(self):
         with self.lock:
-            current_last = self.last_price or 100.0  # fallback si pas encore de prix
-
-        # Alterner les côtés
+            current_last = self.last_price or 100.0
         if self.side_counter > 2:
             side = "sell"
             self.side_counter -= 3
@@ -168,12 +163,11 @@ class SimulatedTrader(Trader):
             side = random.choice(["buy", "sell"])
         self.side_counter += 1 if side == "buy" else -1
 
-        # **Toujours un bruit gaussien autour du dernier prix**
+        # Gaussian noise
         noise = random.gauss(0, self.price_sigma)
-        base_price = current_last * (1 + noise / 100)  # bruit en % autour du prix
+        base_price = current_last * (1 + noise / 100)
         base_price = max(0.1, base_price)
 
-        # Si carnet dispo, légèrement rapprocher du bid/ask
         if side == "buy" and self.best_ask:
             order_price = (base_price + self.best_ask) / 2
         elif side == "sell" and self.best_bid:
@@ -262,14 +256,16 @@ class TrendFollowingTrader(Trader):
         if len(self.price_history) < self.buffer_len:
             return None
             
-        cumulative_return = self.last_price/sum(self.price_history[-self.buffer_len:]) -1 if len(self.price_history) >= self.buffer_len else 1
+        if len(self.price_history) < self.buffer_len:
+            return {"side": "None", "price": 0, "quantity": 0}
+        avg_price = sum(self.price_history[-self.buffer_len:]) / self.buffer_len
+        cumulative_return = (self.last_price / avg_price) - 1
         
-        # More balanced decision making
         if abs(cumulative_return) > self.trend_threshold:
             if cumulative_return > 0:
-                side = "sell"  # Sell when price is rising (take profit)
+                side = "buy" 
             else:
-                side = "buy"   # Buy when price is falling (value buy)
+                side = "sell"
         else:
             return {"side": "None", "price": 0, "quantity": 0}
 

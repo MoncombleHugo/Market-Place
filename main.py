@@ -10,6 +10,8 @@ import time
 import signal
 import sys
 
+#python -m http.server 8000 et lancer main puis aller sur http://localhost:8000/
+
 # --- Fenêtre pour demander combien d'acteurs par classe ---
 def ask_trader_counts():
     root = tk.Tk()
